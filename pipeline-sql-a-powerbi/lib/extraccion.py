@@ -3,16 +3,17 @@ Extracción robusta desde una base SQL.
 
 PARA QUÉ SIRVE
 --------------
-Las tres piezas que hacen que una extracción larga no se caiga ni traiga
-basura, separadas del script principal para poder probarlas solas:
+Las piezas que hacen que una extracción larga no se caiga ni traiga basura,
+separadas del script principal para poder probarlas solas:
 
 - `verificar_columnas()`: aborta ANTES de extraer si falta una columna.
 - `bloques_fecha()`: parte un rango largo en bloques.
+- `armar_consulta()`: el SELECT, con parámetros (sin pegar texto).
 - `extraer_bloque()`: una consulta con reintentos.
 
-La consulta se arma con SQLAlchemy Core (no concatenando texto): las fechas
-y la lista de exclusiones viajan como PARÁMETROS, así que funciona igual en
-PostgreSQL, SQL Server o SQLite y no hay riesgo de inyección SQL.
+La consulta se arma con SQLAlchemy Core: las fechas viajan como PARÁMETROS,
+así que el mismo código funciona en PostgreSQL, SQL Server o SQLite y no hay
+riesgo de inyección SQL.
 """
 import time
 
@@ -24,8 +25,7 @@ def verificar_columnas(engine, tabla, columnas, esquema=None):
     """Aborta si alguna columna pedida no existe en la tabla (o vista) de origen.
 
     Es una consulta barata al catálogo de la base. Sin esto, un error de
-    tipeo en el nombre de una columna se descubre después de esperar toda la
-    extracción.
+    tipeo se descubre después de esperar toda la extracción.
     """
     disponibles = {c["name"] for c in inspect(engine).get_columns(tabla, schema=esquema)}
     faltantes = [c for c in columnas if c not in disponibles]
@@ -37,12 +37,8 @@ def verificar_columnas(engine, tabla, columnas, esquema=None):
 def bloques_fecha(desde, hasta, dias_max, meses_por_bloque):
     """Parte [desde, hasta) en bloques de `meses_por_bloque` meses.
 
-    Un rango corto (la corrida diaria) devuelve un solo bloque. TODOS los
-    bloques terminan, como mucho, en `hasta` (00:00 de hoy): el día en curso
-    queda afuera por construcción, a cualquier hora que corra el script.
-
-    >>> bloques_fecha(pd.Timestamp("2026-09-28"), pd.Timestamp("2026-10-01"), 45, 3)
-    [(Timestamp('2026-09-28 00:00:00'), Timestamp('2026-10-01 00:00:00'))]
+    Un rango corto (la corrida de todos los días) devuelve un solo bloque.
+    Ningún bloque pasa de `hasta`.
     """
     if (hasta - desde).days <= dias_max:
         return [(desde, hasta)]
@@ -56,14 +52,12 @@ def bloques_fecha(desde, hasta, dias_max, meses_por_bloque):
         inicio = fin
 
 
-def armar_consulta(engine, tabla, columnas, desde, hasta, excluir_operaciones, esquema=None):
-    """SELECT columnas FROM tabla WHERE fecha en [desde, hasta) AND operación no excluida."""
+def armar_consulta(engine, tabla, columnas, columna_fecha, desde, hasta, esquema=None):
+    """SELECT <columnas> FROM <tabla> WHERE <fecha> >= :desde AND <fecha> < :hasta"""
     t = Table(tabla, MetaData(), schema=esquema, autoload_with=engine)
-    return select(*[t.c[c] for c in columnas]).where(and_(
-        t.c.fecha_emision >= desde.to_pydatetime(),
-        t.c.fecha_emision < hasta.to_pydatetime(),
-        t.c.tipo_operacion.not_in(list(excluir_operaciones)),
-    ))
+    fecha = t.c[columna_fecha]
+    return select(*[t.c[c] for c in columnas]).where(
+        and_(fecha >= desde.to_pydatetime(), fecha < hasta.to_pydatetime()))
 
 
 def extraer_bloque(engine, consulta, reintentos=3, espera_s=120):
@@ -80,8 +74,7 @@ def extraer_bloque(engine, consulta, reintentos=3, espera_s=120):
             print(f"   [OK] {len(df):,} filas en {time.time() - t0:.1f} s")
             return df
         except Exception as e:   # noqa: BLE001 - cualquier error de red/BD se reintenta igual
-            print(f"   [AVISO] intento {intento}/{reintentos} falló tras {time.time() - t0:.0f} s: "
-                  f"{str(e).splitlines()[0]}")
+            print(f"   [AVISO] intento {intento}/{reintentos} falló: {str(e).splitlines()[0]}")
             engine.dispose()
             if intento == reintentos:
                 raise

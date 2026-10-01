@@ -1,97 +1,66 @@
-# Automatización de datos: del ERP a Power BI
+# Automatización de reportes: del sistema a Power BI
 
-Dos pipelines que reemplazan el trabajo manual de exportar reportes del ERP y
-pegarlos en Excel: extraen los datos, les aplican las reglas de negocio, los
-validan contra los reportes oficiales y mantienen los informes de Power BI
-actualizados solos, desde temprano a la mañana hasta el cierre del día.
+Reemplaza el trabajo manual de exportar datos de un sistema y pegarlos en
+Excel. Un script por fuente extrae los datos, los transforma, los valida y
+deja el archivo que lee Power BI; y un módulo aparte refresca el informe y lo
+publica solo, cada 10 minutos.
 
-> Son versiones genéricas de pipelines que corren en producción en una empresa
-> comercial. El código se reescribió sin ningún dato, regla ni nombre de esa
-> empresa. Cada proyecto trae datos de demostración (una ferretería mayorista
-> inventada) para probarlo en un par de minutos, sin conectarse a nada.
+> Es un patrón que uso en producción, reescrito de forma genérica y con datos
+> de ejemplo inventados. Cada parte se prueba en un minuto, sin conectarse a
+> nada.
 
----
+```mermaid
+flowchart LR
+    SQL[("Base SQL")] --> A["pipeline-sql-a-powerbi<br/>actualizar_reporte.py"]
+    ODOO[("ERP Odoo<br/>API")] --> B["pipeline-erp-odoo-a-powerbi<br/>actualizar_reporte.py"]
+    A --> F["Archivos del reporte<br/>parquet / Excel"]
+    B --> F
+    F --> P["powerbi/<br/>refresh + guardado + publicación"]
+    P -- "cada 10 min" --> S["Power BI Service"]
+```
 
-## Los proyectos
-
-### 1. [Pipeline SQL → Parquet → Power BI](pipeline-sql-a-powerbi/)
-
-La cadena diaria que alimenta los informes desde la **base de datos** del ERP.
-
-- **Extracción incremental** que no duplica ni pierde: el histórico cierra
-  ayer, cada corrida re-extrae una ventana de días para captar anulaciones
-  tardías y los rangos largos se parten en bloques con reintentos.
-- **Reglas de negocio con una sola fuente**: sucursal dominante por vendedor y
-  mes, carteras reasignadas, prorrateo con suma exacta, tasa de IVA enganchada.
-- **Conciliación contra el reporte oficial**, comprobante por comprobante, con
-  corrección automática sólo por debajo de un tope.
-- **Foto diaria del stock**, porque la tabla de origen no guarda historia.
-- Orquestación **en serie con reintentos** (PowerShell + Programador de tareas,
-  o Prefect).
-
-[README](pipeline-sql-a-powerbi/) · [Recorrido por el código](pipeline-sql-a-powerbi/docs/recorrido-del-codigo.md)
-
-### 2. [Pipeline ERP (Odoo) → Power BI, al minuto](pipeline-erp-odoo-a-powerbi/)
-
-Cuando la empresa cambió de ERP a Odoo, los informes siguieron funcionando el
-mismo día.
-
-- **Integración por API** (XML-RPC de Odoo) con paginado estable, reintentos y
-  caché de días cerrados para no gastar llamadas.
-- **Capa de traducción** de las facturas de Odoo al esquema que ya usaban los
-  informes: signos contables, precios con IVA incluido, costo desde los
-  asientos de costo de ventas, notas de crédito que heredan la condición de la
-  factura.
-- **Ventas y cobranza cada minuto**, stock y clientes durante el día.
-- **Power BI publicado cada 10 minutos con licencia Pro y sin gateway**:
-  refresh por XMLA al motor de Desktop, guardado por UI Automation y
-  publicación con PowerShell, con defensa contra refresh colgados.
-
-[README](pipeline-erp-odoo-a-powerbi/) · [Recorrido por el código](pipeline-erp-odoo-a-powerbi/docs/recorrido-del-codigo.md) · [Publicación sin gateway](pipeline-erp-odoo-a-powerbi/powerbi/)
-
----
+| Carpeta | Qué hace | Documentación |
+|---|---|---|
+| [`pipeline-sql-a-powerbi/`](pipeline-sql-a-powerbi/) | Actualiza el reporte desde una **base SQL**: extracción incremental por bloques, con reintentos y validación antes de escribir | [README](pipeline-sql-a-powerbi/) · [Código](pipeline-sql-a-powerbi/docs/recorrido-del-codigo.md) |
+| [`pipeline-erp-odoo-a-powerbi/`](pipeline-erp-odoo-a-powerbi/) | Actualiza el reporte desde un **ERP (Odoo)** por su API, cada minuto, con caché de días cerrados | [README](pipeline-erp-odoo-a-powerbi/) · [Código](pipeline-erp-odoo-a-powerbi/docs/recorrido-del-codigo.md) |
+| [`powerbi/`](powerbi/) | Refresca el `.pbix` en Power BI Desktop, lo guarda y lo **publica cada 10 minutos con Pro y sin gateway** | [README](powerbi/) |
 
 ## Probarlo
 
 Python 3.10 o superior.
 
 ```bash
-# Proyecto 1: crea una base SQLite de demostración y corre la cadena
 cd pipeline-sql-a-powerbi
 pip install -r requirements.txt
-python 00_generar_datos_demo.py
-python 01_extraer_ventas.py
-python 02_conciliar_ventas.py
-python 03_foto_stock.py
+python generar_datos_demo.py && python actualizar_reporte.py
 python -m unittest discover -s tests
 
-# Proyecto 2: sin .env, todo corre contra un Odoo simulado
-cd ../pipeline-erp-odoo-a-powerbi
+cd ../pipeline-erp-odoo-a-powerbi        # sin .env usa un Odoo simulado
 pip install -r requirements.txt
-python actualizar_ventas.py
-python actualizar_cobranza.py
+python actualizar_reporte.py
 python -m unittest discover -s tests
 ```
 
 ## Lo que tienen en común
 
-- **El histórico nunca se cuenta dos veces.** Lo cerrado y lo del día llegan
-  por caminos separados y cada script reemplaza exactamente las filas que le
-  corresponden: correrlo dos veces da el mismo resultado.
-- **El reporte oficial manda.** Lo que muestra Power BI tiene que coincidir con
-  lo que muestra el ERP, o nadie confía en el informe.
-- **Nada se pierde en silencio.** Un vendedor, una sucursal o un depósito que
-  no está mapeado sale con un código visible y un aviso en el log.
-- **Escritura atómica.** Power BI nunca lee un archivo a medio escribir, y si
-  lo tiene abierto, el script espera o lo deja para la próxima corrida.
+- **Incremental y sin duplicar.** Cada corrida trae sólo lo necesario y
+  reemplaza entera una ventana de días: un registro anulado en el sistema
+  también desaparece del reporte, y correrlo dos veces da el mismo resultado.
+- **Robusto ante fallas de red.** Reintentos con espera, consultas en bloques y
+  paginado estable.
+- **Nunca deja un archivo roto.** Escritura atómica, validación antes de
+  escribir, y si Power BI tiene el archivo abierto, espera o lo deja para la
+  próxima corrida.
+- **Corre solo y deja rastro.** Programador de tareas de Windows, log por día
+  y una línea de estado.
 - **Credenciales fuera del código**, en un `.env` que no se sube.
-- **Tests** que fijan los casos que en producción rompieron un informe.
+- **Probado.** 19 tests y datos de demostración para cada fuente.
 
 ## Tecnologías
 
 Python (pandas, SQLAlchemy, pyarrow, openpyxl, `xmlrpc`) · SQL · Odoo ·
-Parquet · PowerShell · Programador de tareas de Windows · Prefect · Power BI
-(XMLA, TOM, Service) · `unittest`
+Parquet · PowerShell · Programador de tareas de Windows · Power BI (XMLA, TOM,
+Service) · `unittest`
 
 ---
 

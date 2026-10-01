@@ -3,13 +3,12 @@ Escritura segura de archivos parquet.
 
 PARA QUÉ SIRVE
 --------------
-El parquet histórico es lo que lee Power BI. Si se corrompe, se cae el
-informe entero. Este módulo resuelve los tres problemas que aparecieron en
-producción:
+El parquet es lo que lee Power BI. Si se corrompe, se cae el reporte entero.
+Este módulo resuelve tres problemas que aparecen en producción:
 
-1. DOS SCRIPTS ESCRIBIENDO A LA VEZ. Si la extracción y la conciliación
-   escriben el mismo archivo al mismo tiempo, se pisan y el parquet queda
-   ilegible. -> `adquirir_lock_escritura()`: sólo un proceso escribe a la vez.
+1. DOS PROCESOS ESCRIBIENDO A LA VEZ (la tarea programada y alguien que la
+   corrió a mano): se pisan y el parquet queda ilegible.
+   -> `adquirir_lock_escritura()`: sólo un proceso escribe a la vez.
 
 2. UN PROCESO QUE SE CORTA A LA MITAD. Si se escribe directo sobre el archivo
    y el proceso muere (corte de luz, timeout), queda un archivo a medias.

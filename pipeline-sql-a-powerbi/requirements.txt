@@ -1,9 +1,6 @@
 pandas>=2.0
 pyarrow>=14
 sqlalchemy>=2.0
-openpyxl>=3.1
 # Según la base de origen, uno de estos:
 # psycopg2-binary   (PostgreSQL)
 # pyodbc            (SQL Server)
-# Opcional, para orquestacion/flujo_prefect.py:
-# prefect

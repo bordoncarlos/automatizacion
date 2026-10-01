@@ -3,8 +3,8 @@ Escritura de los archivos que lee Power BI: parquet y Excel, siempre atómica.
 
 PARA QUÉ SIRVE
 --------------
-Las tareas corren cada minuto y Power BI refresca cada 10 leyendo esos
-mismos archivos. Dos reglas:
+La tarea corre cada minuto y Power BI refresca cada 10 leyendo el mismo
+archivo. Dos reglas:
 
 1. ATÓMICA: se escribe en un temporal y se reemplaza de una vez. Power BI
    nunca lee un archivo a medio escribir.

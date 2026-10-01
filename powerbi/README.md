@@ -100,10 +100,10 @@ powershell -ExecutionPolicy Bypass -File actualizar_y_publicar.ps1 -Pbix "C:\rut
 powershell -ExecutionPolicy Bypass -File actualizar_y_publicar.ps1 -Pbix "C:\ruta\Informe.pbix" -Workspace "Ventas"
 ```
 
-La tarea cada 10 minutos la registra [`../programar_tareas.ps1`](../programar_tareas.ps1):
+La tarea cada 10 minutos la registra [`programar_publicacion.ps1`](programar_publicacion.ps1):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ..\programar_tareas.ps1 -Pbix "C:\ruta\Informe.pbix" -Workspace "Ventas"
+powershell -ExecutionPolicy Bypass -File programar_publicacion.ps1 -Pbix "C:\ruta\Informe.pbix" -Workspace "Ventas"
 ```
 
 Un ciclo normal en el log:
