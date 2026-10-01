@@ -1,0 +1,4 @@
+pandas>=2.0
+pyarrow>=14
+openpyxl>=3.1
+# La API de Odoo se usa con xmlrpc.client, de la biblioteca estándar.

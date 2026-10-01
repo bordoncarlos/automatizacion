@@ -1,0 +1,11 @@
+# Datos generados por los scripts
+datos/
+logs/
+
+# Credenciales: nunca al repositorio
+.env
+powerbi/.credencial_pbi.xml
+*.pbix
+
+__pycache__/
+*.py[cod]
