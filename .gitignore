@@ -1,0 +1,13 @@
+# Datos y logs que generan los scripts (cada proyecto los recrea)
+datos/
+logs/
+
+# Credenciales: nunca al repositorio
+.env
+*.pbix
+.credencial_pbi.xml
+
+__pycache__/
+*.py[cod]
+Thumbs.db
+desktop.ini
