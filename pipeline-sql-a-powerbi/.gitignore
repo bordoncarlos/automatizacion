@@ -1,0 +1,9 @@
+# Datos generados (la demo los recrea con 00_generar_datos_demo.py)
+datos/
+logs/
+
+# Credenciales: nunca al repositorio
+.env
+
+__pycache__/
+*.py[cod]
